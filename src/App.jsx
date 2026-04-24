@@ -3,10 +3,10 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { db } from './firebase'
 import { ref, set, onValue } from 'firebase/database'
 import { 
-  MessageSquare, Mic, Music, Play, ChevronLeft, Bot, 
+  MessageSquare, ChevronLeft, Bot, 
   ArrowUp, ArrowDown, ArrowLeft, ArrowRight, Square, Joystick,
   ArrowUpLeft, ArrowUpRight, ArrowDownLeft, ArrowDownRight,
-  Send, User, Sparkles
+  Send, User, Sparkles, Activity, Cpu
 } from 'lucide-react'
 import './App.css'
 
@@ -36,9 +36,7 @@ function App() {
 
   const GROQ_API_KEY = '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'
 
-  useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" })
-  }, [messages])
+  useEffect(() => { messagesEndRef.current?.scrollIntoView({ behavior: "smooth" }) }, [messages])
 
   const sendCommand = async (cmd) => {
     await set(ref(db, 'commands'), { command: cmd, timestamp: Date.now() })
@@ -58,7 +56,7 @@ function App() {
         body: JSON.stringify({
           model: 'llama-3.1-8b-instant',
           messages: [
-            { role: 'system', content: 'You are Nova Bot. Short, professional, helpful AI.' },
+            { role: 'system', content: 'You are Nova Bot. Short, professional AI.' },
             ...messages.slice(-6).map(m => ({ role: m.role === 'bot' ? 'assistant' : 'user', content: m.text })),
             { role: 'user', content: input }
           ]
@@ -67,14 +65,26 @@ function App() {
       const data = await response.json()
       const botText = data.choices[0].message.content
       const utterance = new SpeechSynthesisUtterance(botText);
-      utterance.rate = 1.1;
       window.speechSynthesis.speak(utterance);
       setMessages(prev => [...prev, { role: 'bot', text: botText }])
-      await sendCommand(`AI_INPUT: ${input}`)
+      await sendCommand(`AI: ${input}`)
     } catch (error) { 
-      setMessages(prev => [...prev, { role: 'bot', text: `Connection failed: ${error.message}. Please verify your Groq API Key and Network.` }])
+      setMessages(prev => [...prev, { role: 'bot', text: 'Connection logic failed.' }])
     } finally { setIsLoading(false) }
   }
+
+  const JogBtn = ({ dir, icon, isStop }) => (
+    <motion.button 
+      whileTap={{ scale: 0.9 }}
+      onMouseDown={() => sendCommand(dir)} 
+      onMouseUp={() => sendCommand('STOP')}
+      onTouchStart={() => sendCommand(dir)}
+      onTouchEnd={() => sendCommand('STOP')}
+      className={`jog-btn ${isStop ? 'stop' : ''}`}
+    >
+      {icon}
+    </motion.button>
+  )
 
   return (
     <div className="app-container">
@@ -85,7 +95,7 @@ function App() {
         {screen === 'landing' && (
           <motion.div key="landing" initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="hero-section">
             <div className="hero-logo">NOVA BOT</div>
-            <button onClick={() => setScreen('menu')} className="enter-btn">INITIALIZE</button>
+            <button onClick={() => setScreen('menu')} className="enter-btn">INITIALIZE SYSTEM</button>
           </motion.div>
         )}
 
@@ -94,12 +104,12 @@ function App() {
              <header className="app-header">
               <button onClick={() => setScreen('landing')} className="back-btn"><ChevronLeft /> Exit</button>
             </header>
-            <h1 className="menu-title">System Modules</h1>
+            <h1 className="menu-title">Select Module</h1>
             <div className="menu-grid">
               <div onClick={() => setScreen('novatalk')} className="menu-card"><MessageSquare color="#00f2ff" /><span>NovaTalk</span></div>
-              <div onClick={() => setScreen('jog')} className="menu-card"><Joystick color="#00f2ff" /><span>Manual Jog</span></div>
-              <div className="menu-card disabled"><Mic color="#444" /><span>Speech</span></div>
-              <div className="menu-card disabled"><Play color="#444" /><span>Action</span></div>
+              <div onClick={() => setScreen('jog')} className="menu-card"><Joystick color="#00f2ff" /><span>8-Axis Jog</span></div>
+              <div className="menu-card disabled"><Cpu color="#333" /><span>Neural Link</span></div>
+              <div className="menu-card disabled"><Activity color="#333" /><span>Health Sync</span></div>
             </div>
           </motion.div>
         )}
@@ -107,40 +117,22 @@ function App() {
         {screen === 'novatalk' && (
           <motion.div key="talk" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} className="app-main">
             <header className="app-header">
-              <button onClick={() => setScreen('menu')} className="back-btn"><ChevronLeft /> Menu</button>
+              <button onClick={() => setScreen('menu')} className="back-btn"><ChevronLeft /> Back</button>
               <div className="status-badge"><Sparkles size={12}/> AI Active</div>
             </header>
-            
             <div className="pro-chat-wrapper">
               <div className="chat-messages">
                 {messages.map((m, i) => (
-                  <motion.div 
-                    key={i} 
-                    initial={{ opacity: 0, y: 10 }} 
-                    animate={{ opacity: 1, y: 0 }}
-                    className={`chat-bubble ${m.role}`}
-                  >
-                    <div className="bubble-icon">
-                      {m.role === 'user' ? <User size={14}/> : <Bot size={14}/>}
-                    </div>
+                  <div key={i} className={`chat-bubble ${m.role}`}>
+                    <div className="bubble-icon">{m.role === 'user' ? <User size={14}/> : <Bot size={14}/>}</div>
                     <div className="bubble-text">{m.text}</div>
-                  </motion.div>
+                  </div>
                 ))}
-                {isLoading && <div className="chat-bubble bot typing">Nova is thinking...</div>}
                 <div ref={messagesEndRef} />
               </div>
-              
               <div className="pro-input-container">
-                <input 
-                  value={input} 
-                  onChange={(e) => setInput(e.target.value)} 
-                  onKeyPress={(e) => e.key === 'Enter' && handleSend()}
-                  placeholder="Ask anything..."
-                  autoFocus
-                />
-                <button onClick={handleSend} disabled={isLoading}>
-                  <Send size={18} />
-                </button>
+                <input value={input} onChange={(e) => setInput(e.target.value)} onKeyPress={(e) => e.key === 'Enter' && handleSend()} placeholder="Command Nova..." />
+                <button onClick={handleSend} disabled={isLoading}><Send size={18} /></button>
               </div>
             </div>
           </motion.div>
@@ -148,19 +140,17 @@ function App() {
 
         {screen === 'jog' && (
           <motion.div key="jog" initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="app-main">
-            <header className="app-header"><button onClick={() => setScreen('menu')} className="back-btn"><ChevronLeft /> Back</button></header>
+            <header className="app-header"><button onClick={() => setScreen('menu')} className="back-btn"><ChevronLeft /> Menu</button><div className="status-badge">Manual Override</div></header>
             <div className="jog-grid-8way">
-               {/* Jog Buttons */}
-               {['NW','N','NE','W','STOP','E','SW','S','SE'].map(dir => (
-                 <button 
-                  key={dir}
-                  onMouseDown={() => sendCommand(dir)} 
-                  onMouseUp={() => sendCommand('STOP')}
-                  className={`jog-btn ${dir==='STOP'?'stop':''}`}
-                 >
-                   {dir==='STOP'?<Square/>:dir}
-                 </button>
-               ))}
+               <JogBtn dir="NW" icon={<ArrowUpLeft />} />
+               <JogBtn dir="N" icon={<ArrowUp />} />
+               <JogBtn dir="NE" icon={<ArrowUpRight />} />
+               <JogBtn dir="W" icon={<ArrowLeft />} />
+               <JogBtn dir="STOP" icon={<Square />} isStop />
+               <JogBtn dir="E" icon={<ArrowRight />} />
+               <JogBtn dir="SW" icon={<ArrowDownLeft />} />
+               <JogBtn dir="S" icon={<ArrowDown />} />
+               <JogBtn dir="SE" icon={<ArrowDownRight />} />
             </div>
           </motion.div>
         )}
